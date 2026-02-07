@@ -106,6 +106,32 @@
       font-size: 0.8rem;
       opacity: 0.5;
     }
+
+    li.dragging {
+      opacity: 0.4;
+    }
+
+    li.drag-over {
+      outline: 2px dashed #94a3b8;
+    }
+
+    /* Drag handle for touch devices */
+    .handle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      margin-right: 6px;
+      border-radius: 6px;
+      background: transparent;
+      color: #94a3b8;
+      cursor: grab;
+      user-select: none;
+      font-size: 16px;
+    }
+
+    .handle:active { cursor: grabbing; }
   </style>
 </head>
 <body>
@@ -132,6 +158,11 @@
     const list = document.getElementById("todo-list");
     const resetBtn = document.getElementById('reset-btn');
     const dateEl = document.getElementById('current-date');
+    let draggedIndex = null;
+    let touchLongPressTimer = null;
+    let touchDragging = false;
+    let touchDraggedIndex = null;
+    let touchOverIndex = null;
 
     let todos = JSON.parse(localStorage.getItem("todos")) || [];
 
@@ -160,9 +191,12 @@
       todos.forEach((todo, index) => {
         const li = document.createElement("li");
         if (todo.done) li.classList.add("done");
+        li.setAttribute('draggable', 'true');
+        li.dataset.index = index;
 
         li.innerHTML = `
           <div class="left">
+            <span class="handle" aria-hidden="true">☰</span>
             <input type="checkbox" ${todo.done ? "checked" : ""} />
             <span>${todo.text}</span>
           </div>
@@ -180,6 +214,108 @@
           saveTodos();
           renderTodos();
         });
+
+        // Drag and drop handlers (desktop)
+        li.addEventListener('dragstart', (e) => {
+          draggedIndex = index;
+          li.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        li.addEventListener('dragend', () => {
+          draggedIndex = null;
+          li.classList.remove('dragging');
+          // remove any drag-over markers
+          document.querySelectorAll('.drag-over').forEach(n => n.classList.remove('drag-over'));
+        });
+
+        li.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          li.classList.add('drag-over');
+        });
+
+        li.addEventListener('dragleave', () => {
+          li.classList.remove('drag-over');
+        });
+
+        li.addEventListener('drop', (e) => {
+          e.preventDefault();
+          li.classList.remove('drag-over');
+          const targetIndex = Number(li.dataset.index);
+          if (draggedIndex === null || draggedIndex === targetIndex) return;
+          // move item
+          const [moved] = todos.splice(draggedIndex, 1);
+          todos.splice(targetIndex, 0, moved);
+          saveTodos();
+          renderTodos();
+        });
+
+        // Touch / mobile: long-press on the handle to start dragging
+        const handle = li.querySelector('.handle');
+        if (handle) {
+          handle.addEventListener('touchstart', (ev) => {
+            if (ev.touches.length > 1) return;
+            const t = ev.touches[0];
+            const startY = t.clientY;
+            touchLongPressTimer = setTimeout(() => {
+              touchDragging = true;
+              touchDraggedIndex = index;
+              li.classList.add('dragging');
+            }, 300);
+
+            const onTouchMove = (moveEv) => {
+              if (!moveEv.touches || moveEv.touches.length === 0) return;
+              const mv = moveEv.touches[0];
+              const dy = Math.abs(mv.clientY - startY);
+              if (!touchDragging && dy > 10) {
+                clearTimeout(touchLongPressTimer);
+                touchLongPressTimer = null;
+              }
+
+              if (touchDragging) {
+                const el = document.elementFromPoint(mv.clientX, mv.clientY);
+                const overLi = el && el.closest && el.closest('li');
+                document.querySelectorAll('.drag-over').forEach(n => n.classList.remove('drag-over'));
+                if (overLi && overLi.dataset.index !== undefined) {
+                  overLi.classList.add('drag-over');
+                  touchOverIndex = Number(overLi.dataset.index);
+                }
+              }
+            };
+
+            const onTouchEnd = () => {
+              clearTimeout(touchLongPressTimer);
+              touchLongPressTimer = null;
+              if (touchDragging) {
+                if (touchDraggedIndex !== null && touchOverIndex !== null && touchDraggedIndex !== touchOverIndex) {
+                  const [moved] = todos.splice(touchDraggedIndex, 1);
+                  todos.splice(touchOverIndex, 0, moved);
+                  saveTodos();
+                }
+              }
+              touchDragging = false;
+              touchDraggedIndex = null;
+              touchOverIndex = null;
+              document.querySelectorAll('.drag-over').forEach(n => n.classList.remove('drag-over'));
+              document.removeEventListener('touchmove', onTouchMove);
+              document.removeEventListener('touchend', onTouchEnd);
+              renderTodos();
+            };
+
+            document.addEventListener('touchmove', onTouchMove, { passive: true });
+            document.addEventListener('touchend', onTouchEnd);
+          });
+
+          handle.addEventListener('touchcancel', () => {
+            clearTimeout(touchLongPressTimer);
+            touchLongPressTimer = null;
+            touchDragging = false;
+            touchDraggedIndex = null;
+            touchOverIndex = null;
+            document.querySelectorAll('.drag-over').forEach(n => n.classList.remove('drag-over'));
+          });
+        }
 
         list.appendChild(li);
       });
