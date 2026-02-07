@@ -58,6 +58,12 @@
       cursor: pointer;
     }
 
+    /* Make the Reset button visually distinct */
+    #reset-btn {
+      background: #e91212;
+      color: #000000;
+    }
+
     ul {
       list-style: none;
       padding: 0;
@@ -105,27 +111,48 @@
 <body>
 
   <div class="app">
-    <h1>To-Do</h1>
+    <h1>To-Do-List</h1>
 
     <form id="todo-form">
       <input id="todo-input" placeholder="Add a task..." autocomplete="off" />
       <button>Add</button>
+      <button type="button" id="reset-btn">Reset</button>
     </form>
 
     <ul id="todo-list"></ul>
 
-    <div class="footer">Saved locally · No login · No excuses</div>
+    <div class="footer">
+      <div id="current-date" style="margin-bottom:0.25rem; opacity:0.9;"></div>
+    </div>
   </div>
 
   <script>
     const form = document.getElementById("todo-form");
     const input = document.getElementById("todo-input");
     const list = document.getElementById("todo-list");
+    const resetBtn = document.getElementById('reset-btn');
+    const dateEl = document.getElementById('current-date');
 
     let todos = JSON.parse(localStorage.getItem("todos")) || [];
 
     function saveTodos() {
       localStorage.setItem("todos", JSON.stringify(todos));
+    }
+
+    // Set the current date in the footer
+    if (dateEl) {
+      const opts = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
+      dateEl.textContent = new Date().toLocaleDateString(undefined, opts);
+    }
+
+    // Reset button clears todos and localStorage
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        if (!confirm('Clear all tasks?')) return;
+        todos = [];
+        saveTodos();
+        renderTodos();
+      });
     }
 
     function renderTodos() {
